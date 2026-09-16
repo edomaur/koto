@@ -99,6 +99,7 @@ mod koto_tests {
 
     koto_test!(comments);
     koto_test!(enums);
+    koto_test!(grammar_conformance);
     koto_test!(io);
     koto_test!(load_and_run);
     koto_test!(meta_maps);

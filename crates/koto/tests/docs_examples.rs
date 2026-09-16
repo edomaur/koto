@@ -31,6 +31,7 @@ macro_rules! test_top_level_examples {
 }
 
 test_top_level_examples!(about);
+test_top_level_examples!(formal_grammar);
 test_top_level_examples!(language_guide);
 
 mod core_lib {
