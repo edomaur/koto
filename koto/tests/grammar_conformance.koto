@@ -1,0 +1,89 @@
+# Conformance tests for the operator precedence table in docs/formal_grammar.md
+#
+# These claims are about how expressions group rather than whether they parse, so they're checked
+# by evaluation here. Parse-level claims live in crates/parser/tests/grammar_conformance.rs.
+
+export
+  @test not_binds_less_tightly_than_binary_operators: ||
+    # `not` takes a whole expression as its operand
+    assert_eq (not true and false), not (true and false)
+    assert_eq (not true and false), true
+    assert_eq (not 1 == 2), true
+
+  @test not_binds_less_tightly_than_assignment: ||
+    # `not a = true` groups as `not (a = true)`
+    result = not a = true
+    assert_eq a, true
+    assert_eq result, false
+
+  @test negation_binds_more_tightly_than_power: ||
+    assert_eq -2 ^ 2, 4
+    assert_eq 0 - 2 ^ 2, -4
+
+  @test power_is_left_associative: ||
+    assert_eq 2 ^ 3 ^ 2, 64
+    assert_ne 2 ^ 3 ^ 2, 512
+
+  @test arithmetic_binds_more_tightly_than_comparison: ||
+    assert_eq (1 + 1 == 2), true
+
+  @test logical_and_binds_more_tightly_than_or: ||
+    assert_eq (true or true and false), true
+
+  @test ranges_bind_less_tightly_than_binary_operators: ||
+    assert_eq (1 + 1..2 + 2).to_tuple(), (2, 3)
+    assert_eq (1..2 + 3).to_tuple(), (1, 2, 3, 4)
+
+  @test ranges_bind_more_tightly_than_assignment: ||
+    x = 1..5
+    assert_eq x.to_tuple(), (1, 2, 3, 4)
+
+  @test pipe_binds_less_tightly_than_paren_free_calls: ||
+    double = |x| x * 2
+    identity = |x| x
+    # `identity 3 -> double` groups as `(identity 3) -> double`
+    result = identity 3 -> double
+    assert_eq result, 6
+
+  @test pipe_is_left_associative: ||
+    increment = |x| x + 1
+    double = |x| x * 2
+    # (1 -> increment) -> double
+    result = 1 -> increment -> double
+    assert_eq result, 4
+
+  @test compound_assignment_is_right_associative: ||
+    x = 1
+    x += 2
+    assert_eq x, 3
+
+  @test paren_free_call_args_admit_assignment: ||
+    identity = |x| x
+    assert_eq (identity y = 7), 7
+    assert_eq y, 7
+
+  @test postfix_binds_more_tightly_than_binary_operators: ||
+    m = {a: 10}
+    assert_eq m.a + 1, 11
+
+  @test parentheses_group_rather_than_make_a_tuple: ||
+    assert_eq (1 + 2) * 3, 9
+    assert_eq koto.type((1,)), 'Tuple'
+    assert_eq koto.type((1)), 'Number'
+
+  @test empty_parentheses_are_an_empty_tuple: ||
+    assert_eq koto.type(()), 'Tuple'
+    assert_eq (), ()
+
+  @test bare_tuples_need_no_parentheses: ||
+    x = 1, 2
+    assert_eq x, (1, 2)
+
+  @test return_and_break_take_comma_separated_expressions: ||
+    f = || return 1, 2
+    assert_eq f(), (1, 2)
+
+    g = ||
+      loop
+        break 3, 4
+    assert_eq g(), (3, 4)
