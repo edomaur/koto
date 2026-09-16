@@ -3551,55 +3551,54 @@ impl Compiler {
         let piped_value = self.compile_node(lhs, ctx.with_any_register())?;
         let pipe_register = Some(piped_value.unwrap(self)?);
 
+        // Each of the branches below compiles the call into `call_context`, so that the call's
+        // output ends up in the result register that was assigned above.
+        //
+        // It's important that they don't return the output of the inner call/chain instead of
+        // `result`: doing so would either leak the register assigned above (when the inner output
+        // reports `is_temporary: false`), or allocate a second result register (when the inner
+        // call is given a context that asks for one). Either way the temporary register stack
+        // would be left out of step, and the `pop_register` calls below would free the wrong
+        // register.
         let rhs_node = ctx.node_with_span(rhs);
-        let result = match &rhs_node.node {
+        let call_context = ctx.with_register(call_result_register);
+
+        match &rhs_node.node {
             Node::Id(id, ..) => {
                 // Compile a call with the piped arg, using the id to access the function
                 if let Some(function_register) = self.frame().get_local_assigned_register(*id) {
-                    self.compile_call(function_register, &[], pipe_register, None, ctx)
+                    self.compile_call(function_register, &[], pipe_register, None, call_context)?;
                 } else {
-                    let call_result_register = if let Some(result_register) = result.register {
-                        ResultRegister::Fixed(result_register)
-                    } else {
-                        ResultRegister::None
-                    };
-
                     let function_register = self.push_register()?;
                     self.compile_load_non_local(function_register, *id);
 
-                    let call_context = ctx.with_register(call_result_register);
                     self.compile_call(function_register, &[], pipe_register, None, call_context)?;
 
                     self.pop_register()?; // function_register
-                    Ok(result)
                 }
             }
             Node::Chain(chain_node) => {
                 // Compile the chain, passing in the piped call arg, which will either be appended
                 // to call args at the end of a chain, or the last node will be turned into a call.
-                let call_context = ctx.with_register(call_result_register);
-                self.compile_chain(chain_node, pipe_register, None, None, call_context)
+                self.compile_chain(chain_node, pipe_register, None, None, call_context)?;
             }
             _ => {
                 // If the RHS is none of the above, then compile it assuming that the result will
                 // be a function.
                 let function = self.compile_node(rhs, ctx.with_any_register())?;
                 let function_register = function.unwrap(self)?;
-                let call_context = ctx.with_register(call_result_register);
-                let result =
-                    self.compile_call(function_register, &[], pipe_register, None, call_context)?;
+                self.compile_call(function_register, &[], pipe_register, None, call_context)?;
                 if function.is_temporary {
                     self.pop_register()?;
                 }
-                Ok(result)
             }
-        };
+        }
 
         if piped_value.is_temporary {
             self.pop_register()?;
         }
 
-        result
+        Ok(result)
     }
 
     fn compile_call(

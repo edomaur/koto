@@ -2229,6 +2229,67 @@ calls
 ";
                 check_script_output(script, number_list(&[1, 110, 2, 120, 3, 130, 4, 140]));
             }
+
+            // A nested pipe used to leak a temporary register, which corrupted any sibling
+            // values that were allocated afterwards, e.g. the remaining entries of a tuple.
+            #[test]
+            fn nested_pipe_followed_by_sibling_values() {
+                let script = "
+inc = |x| x + 1
+dbl = |x| x * 2
+
+(1 -> inc -> dbl), 9, 8
+";
+                check_script_output(script, number_tuple(&[4, 9, 8]));
+            }
+
+            #[test]
+            fn nested_pipe_into_chain_followed_by_sibling_values() {
+                let script = "
+ops =
+  inc: |x| x + 1
+  dbl: |x| x * 2
+
+(1 -> ops.inc -> ops.dbl), 9
+";
+                check_script_output(script, number_tuple(&[4, 9]));
+            }
+
+            #[test]
+            fn nested_pipe_into_non_local_followed_by_sibling_values() {
+                let script = "
+inc = |x| x + 1
+dbl = |x| x * 2
+
+# Within the function body `inc` and `dbl` are captured non-locals
+f = || (1 -> inc -> dbl), 9
+f()
+";
+                check_script_output(script, number_tuple(&[4, 9]));
+            }
+
+            #[test]
+            fn nested_pipe_into_expression_followed_by_sibling_values() {
+                let script = "
+inc = |x| x + 1
+dbl = |x| x * 2
+ops = [inc, dbl]
+
+(1 -> ops[0] -> ops[1]), 9
+";
+                check_script_output(script, number_tuple(&[4, 9]));
+            }
+
+            #[test]
+            fn nested_pipe_in_a_list() {
+                let script = "
+inc = |x| x + 1
+dbl = |x| x * 2
+
+[1 -> inc -> dbl, 9]
+";
+                check_script_output(script, number_list(&[4, 9]));
+            }
         }
     }
 
